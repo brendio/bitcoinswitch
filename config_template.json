@@ -1,0 +1,26 @@
+{
+  "_comment": "bitcoinSwitch Configuration Template - Edit values below and save",
+  "_comment_instructions": "Run: python3 configure_device.py to write config to device",
+  
+  "config_ssid": "Pool",
+  "config_password": "PoolTable",
+  "config_device_string": "wss://lnvault.mineracks.com/api/v1/ws/XYy9CWVaVxghaESJApADun",
+  
+  "_comment_optional": "Optional parameters - leave empty (blank string) to disable features",
+  "telegram_bot_token": "",
+  "telegram_chat_id": "",
+  "device_name": "Waveshare-01",
+  
+  "_comment_ethernet": "Ethernet static IP configuration - leave ALL blank for DHCP (recommended)",
+  "_comment_ethernet_note": "Only set if you need a fixed IP address for your device",
+  "static_ip": "",
+  "static_gateway": "",
+  "static_subnet": "255.255.255.0",
+  
+  "_comment_legacy": "Legacy threshold mode parameters (disabled in v1.0+)",
+  "_comment_legacy_note": "These are kept for backward compatibility but not currently used",
+  "config_threshold_inkey": "",
+  "config_threshold_amount": "",
+  "config_threshold_pin": "",
+  "config_threshold_time": ""
+}
