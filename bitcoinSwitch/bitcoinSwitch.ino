@@ -38,6 +38,15 @@ int config_threshold_amount;
 int config_threshold_pin;
 int config_threshold_time;
 
+// Network configuration (Ethernet/WiFi)
+String config_static_ip = "";
+String config_static_gateway = "";
+String config_static_subnet = "255.255.255.0";
+
+// Network state tracking
+bool ethernetConnected = false;
+bool wifiConnected = false;
+
 String apiUrl = "/api/v1/ws/";
 
 WebSocketsClient webSocket;
@@ -110,7 +119,40 @@ void setup() {
     #endif
     
     setupConfig();
-    setupWifi();
+    
+    // Network setup: Ethernet first, WiFi fallback
+    bool networkConnected = false;
+    
+    #ifdef USE_ETHERNET
+    Serial.println("\n=== Network Setup: Ethernet Priority ===");
+    networkConnected = setupEthernet();
+    
+    if (!networkConnected) {
+        Serial.println("Ethernet not available, trying WiFi fallback...");
+    }
+    #endif
+    
+    // WiFi fallback: only if Ethernet failed AND WiFi credentials provided
+    if (!networkConnected) {
+        bool wifiEnabled = (config_ssid != "" && config_password != "");
+        
+        if (wifiEnabled) {
+            Serial.println("Starting WiFi fallback...");
+            networkConnected = setupWifi();
+        } else {
+            Serial.println("ℹ️  WiFi fallback disabled (no credentials configured)");
+            Serial.println("   Set config_ssid and config_password to enable WiFi fallback");
+        }
+    }
+    
+    if (!networkConnected) {
+        Serial.println("❌ No network connection available!");
+        #ifdef USE_RGB_LED
+        setStatusLED(STATUS_NETWORK_ERROR);
+        #endif
+        printTFT("No network!", 21, 95);
+        return;
+    }
 
     pinMode(2, OUTPUT); // To blink on board LED
 
@@ -146,6 +188,11 @@ void setup() {
 }
 
 void loop() {
+    // Maintain network connections
+    #ifdef USE_ETHERNET
+    maintainEthernet();
+    #endif
+    
     loopWifi();
     webSocket.loop();
     

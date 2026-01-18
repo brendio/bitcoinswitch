@@ -77,6 +77,11 @@ void setupConfig(){
     String led_time = getJsonValue(doc, "config_threshold_time", CONFIG_THRESHOLD_TIME);
     config_threshold_time = led_time.toInt();
     Serial.println("Threshold time: " + String(config_threshold_time));
+    
+    // Network configuration (optional)
+    config_static_ip = getJsonValue(doc, "static_ip", "");
+    config_static_gateway = getJsonValue(doc, "static_gateway", "");
+    config_static_subnet = getJsonValue(doc, "static_subnet", "255.255.255.0");
 }
 
 String readConfig() {
