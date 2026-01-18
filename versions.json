@@ -2,8 +2,18 @@
   "name": "bitcoinSwitch",
   "devices": [
     "esp32",
-    "tdisplay"
+    "tdisplay",
+    "waveshare"
   ],
+  "waveshare": {
+    "display": "none",
+    "status_feedback": "rgb_led",
+    "relays": 8,
+    "digital_inputs": 8,
+    "network": "ethernet+wifi",
+    "mcu": "ESP32-S3",
+    "hardware": "ESP32-S3-ETH-8DI-8RO"
+  },
   "versions": [
     "v1.0.1",
     "v1.0.0",

@@ -110,6 +110,11 @@ void executeConfigBoot() {
     Serial.println("Entering boot mode. Waiting for " + String(BOOTUP_TIMEOUT) + " seconds.");
     clearTFT();
     printTFT("BOOT MODE", 21, 21);
+    
+    #ifdef USE_RGB_LED
+    setStatusLED(STATUS_BOOTING);
+    #endif
+    
     int counter = BOOTUP_TIMEOUT + 1;
     while (counter-- > 0) {
         if (Serial.available() == 0) {
@@ -133,8 +138,18 @@ void executeConfigForever() {
     Serial.println("Entering config mode. until we receive /config-done.");
     clearTFT();
     printTFT("CONFIG", 21, 21);
+    
+    #ifdef USE_RGB_LED
+    setStatusLED(STATUS_CONFIG_MODE);
+    Serial.println("LED: Config mode (blue fast blink)");
+    #endif
+    
     bool done = false;
     while (true) {
+        #ifdef USE_RGB_LED
+        updateStatusLED();  // Keep LED animation running
+        #endif
+        
         done = executeConfig();
         if (done) {
             Serial.println("Exiting config mode.");

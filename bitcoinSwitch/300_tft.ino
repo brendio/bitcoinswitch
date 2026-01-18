@@ -1,4 +1,18 @@
+// ============================================
+// DISPLAY MODULE - DISABLED FOR WAVESHARE
+// ============================================
+// NOTE: Waveshare ESP32-S3-ETH-8DI-8RO has NO DISPLAY
+// This device is headless and uses:
+// - RGB LED (GPIO 38) for visual status feedback
+// - Serial output for debugging
+// - Telegram notifications for remote monitoring
+//
+// Display functions are stubbed out to maintain compatibility
+// with the original bitcoinSwitch codebase.
+// ============================================
+
 #ifdef TFT
+// TFT display support for devices with displays (e.g., TDISPLAY)
 #include <TFT_eSPI.h>
 TFT_eSPI tft = TFT_eSPI(TFT_WIDTH, TFT_HEIGHT);
 void setupTFT() {
@@ -63,8 +77,31 @@ void flashTFT() {
   tft.fillScreen(TFT_GREEN);
 }
 #else
-void printTFT(String message, int x, int y) {}
-void printHome(bool wifi, bool ws, bool ping) {}
-void clearTFT() {}
-void flashTFT() {}
+// Stub functions for devices without displays (including Waveshare)
+// Output to serial instead of display
+void setupTFT() {
+  #ifdef WAVESHARE
+  Serial.println("Device has NO DISPLAY (headless operation)");
+  Serial.println("Status feedback via RGB LED on GPIO 38");
+  #endif
+}
+void printTFT(String message, int x, int y) {
+  // Output to serial instead of display
+  Serial.print("STATUS: ");
+  Serial.println(message);
+}
+void printHome(bool wifi, bool ws, bool ping) {
+  // Output status to serial
+  Serial.println("=== Status Update ===");
+  Serial.printf("WiFi: %s\n", wifi ? "Connected" : "Disconnected");
+  Serial.printf("WebSocket: %s\n", ws ? "Connected" : "Disconnected");
+  if (ping) Serial.println("Ping received");
+}
+void clearTFT() {
+  // No-op for headless devices
+}
+void flashTFT() {
+  // No-op for headless devices (use RGB LED instead)
+  Serial.println("FLASH: Payment received!");
+}
 #endif
