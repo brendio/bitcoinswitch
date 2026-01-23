@@ -1,11 +1,16 @@
 // ============================================
 // I2C Relay Controller for Waveshare ESP32-S3-ETH-8DI-8RO
 // Controls 8 relays via TCA9554PWR I2C GPIO Expander
+// With demo-style error handling and failure detection
 // ============================================
 
 #ifdef WAVESHARE
 #include <Wire.h>
 #include "device_config.h"
+
+// Demo-style failure tracking
+bool relayFailureFlag = false;
+TaskHandle_t relayFailTaskHandle = NULL;
 
 // I2C Relay Controller Class
 class RelayControllerI2C {
@@ -77,11 +82,13 @@ public:
     bool setRelay(uint8_t relayNum, bool state) {
         if (!initialized) {
             Serial.println("ERROR: Relay controller not initialized!");
+            relayFailureFlag = true;  // Demo-style error flag
             return false;
         }
 
         if (relayNum >= RELAY_COUNT) {
             Serial.printf("ERROR: Invalid relay number %d (valid: 0-%d)\n", relayNum, RELAY_COUNT - 1);
+            relayFailureFlag = true;  // Demo-style error flag
             return false;
         }
 
@@ -103,6 +110,8 @@ public:
         // Write the new state to the I2C expander
         if (!writeRegister(TCA9554_OUTPUT_REG, currentState)) {
             Serial.printf("ERROR: Failed to set relay %d\n", relayNum + 1);
+            relayFailureFlag = true;  // Demo-style error flag
+            logError("RELAY", "Failed to set relay " + String(relayNum + 1));
             return false;
         }
 
@@ -113,6 +122,7 @@ public:
     // Trigger a relay for a specific duration (milliseconds)
     bool triggerRelay(uint8_t relayNum, unsigned long duration_ms) {
         if (!setRelay(relayNum, true)) {
+            relayFailureFlag = true;  // Demo-style error flag
             return false;
         }
         delay(duration_ms);
@@ -160,9 +170,54 @@ public:
 // Global relay controller instance
 RelayControllerI2C relayController;
 
+/**
+ * Relay Failure Monitoring Task (demo pattern)
+ * Monitors relay failures and provides visual/audio feedback
+ */
+void RelayFailTask(void *parameter) {
+    while(1) {
+        if (relayFailureFlag) {
+            relayFailureFlag = false;  // Clear flag
+            
+            Serial.println("⚠️  Relay control failure detected!");
+            logError("RELAY", "Relay control failed - check I2C connection");
+            
+            // Visual feedback via RGB LED (red flash)
+            #ifdef USE_RGB_LED
+            for (int i = 0; i < 5; i++) {
+                setStatusLED(STATUS_ERROR);
+                vTaskDelay(pdMS_TO_TICKS(500));
+                setStatusLED(STATUS_OFF);
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
+            // Restore previous state
+            setStatusLED(STATUS_ETHERNET_CONNECTED);
+            #endif
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));  // Check every 50ms
+    }
+    vTaskDelete(NULL);
+}
+
 // Helper functions for backward compatibility with GPIO-based code
 bool initRelayController() {
-    return relayController.begin();
+    bool success = relayController.begin();
+    
+    if (success) {
+        // Create FreeRTOS monitoring task (demo pattern)
+        xTaskCreatePinnedToCore(
+            RelayFailTask,           // Task function
+            "RelayFailTask",         // Task name
+            4096,                    // Stack size
+            NULL,                    // Parameters
+            3,                       // Priority (higher than Ethernet)
+            &relayFailTaskHandle,    // Task handle
+            0                        // Core 0
+        );
+        Serial.println("Relay failure monitoring task started");
+    }
+    
+    return success;
 }
 
 bool setRelayPin(uint8_t relayNum, bool state) {

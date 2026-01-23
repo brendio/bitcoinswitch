@@ -36,16 +36,26 @@
 #define RELAY_8 7
 
 // Digital Inputs (8 available)
+// Pin mapping from Waveshare demo code (WS_DIN.h)
+// Consecutive GPIO 4-11 for proper LED indicator operation
+// Active-LOW: INPUT_PULLUP mode, grounding to DGND activates
+// LED behavior: OFF when open, ON when grounded
 #define DI_COUNT 8
-#define DI_PIN_1 1
-#define DI_PIN_2 2
-#define DI_PIN_3 14
-#define DI_PIN_4 21
-#define DI_PIN_5 47
-#define DI_PIN_6 48
-#define DI_PIN_7 45
-#define DI_PIN_8 0
+#define DI_PIN_1 4      // Was 1 - updated to match demo
+#define DI_PIN_2 5      // Was 2 - updated to match demo
+#define DI_PIN_3 6      // Was 14 - updated to match demo
+#define DI_PIN_4 7      // Was 21 - updated to match demo
+#define DI_PIN_5 8      // Was 47 - updated to match demo
+#define DI_PIN_6 9      // Was 48 - updated to match demo
+#define DI_PIN_7 10     // Was 45 - updated to match demo
+#define DI_PIN_8 11     // Was 0 - updated to match demo
 #define DI_ACTIVE_LOW true  // Active low inputs with internal pullup
+
+// DI pin array for easier iteration
+const uint8_t DI_PINS[DI_COUNT] = {
+    DI_PIN_1, DI_PIN_2, DI_PIN_3, DI_PIN_4,
+    DI_PIN_5, DI_PIN_6, DI_PIN_7, DI_PIN_8
+};
 
 // RGB LED Status Indicator (WS2812)
 #define RGB_LED_PIN 38
@@ -53,14 +63,17 @@
 #define RGB_LED_BRIGHTNESS 50  // 0-255
 
 // Ethernet (W5500 on SPI)
+// Pin mapping from Waveshare demo code (WS_ETH.h)
 #define USE_ETHERNET 1
+#define ETH_PHY_TYPE ETH_PHY_W5500
+#define ETH_PHY_ADDR 1
 #define ETH_SPI_HOST SPI3_HOST
-#define ETH_CS_PIN 10
-#define ETH_SCK_PIN 7
-#define ETH_MISO_PIN 3
-#define ETH_MOSI_PIN 6
-#define ETH_INT_PIN 4
-#define ETH_RST_PIN 5
+#define ETH_CS_PIN 16     // Was 10 - updated to match demo
+#define ETH_SCK_PIN 15    // Was 7 - updated to match demo
+#define ETH_MISO_PIN 14   // Was 3 - updated to match demo
+#define ETH_MOSI_PIN 13   // Was 6 - updated to match demo
+#define ETH_INT_PIN 12    // Was 4 - updated to match demo
+#define ETH_RST_PIN 39    // Was 5 - updated to match demo
 
 // USB Serial (CDC on boot)
 #define DEBUG_SERIAL Serial

@@ -17,8 +17,17 @@ int ramLogCount = 0;
 
 // LogLevel enum defined in main sketch
 
-// Timestamp tracking (uptime in seconds)
+// Timestamp tracking
 unsigned long bootTime = 0;
+extern bool timeIsSynced;  // From 360_ntp_time.ino
+
+/**
+ * Get timestamp string for log entries
+ * Uses NTP time if available, otherwise uptime
+ */
+String getLogTimestamp() {
+  return getCurrentTimeString();  // From 360_ntp_time.ino
+}
 
 /**
  * Initialize logging system
@@ -79,20 +88,6 @@ void rotateLog() {
   }
   
   Serial.println("Log rotated");
-}
-
-/**
- * Get formatted timestamp string (uptime in HH:MM:SS)
- */
-String getLogTimestamp() {
-  unsigned long uptime = (millis() - bootTime) / 1000;
-  int hours = uptime / 3600;
-  int minutes = (uptime % 3600) / 60;
-  int seconds = uptime % 60;
-  
-  char timestamp[16];
-  sprintf(timestamp, "%02d:%02d:%02d", hours, minutes, seconds);
-  return String(timestamp);
 }
 
 /**

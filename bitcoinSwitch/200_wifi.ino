@@ -9,9 +9,15 @@ bool setupWifi() {
         return false;
     }
     
+    Serial.println("\n=== Starting WiFi ===");
+    
     #ifdef USE_RGB_LED
     setStatusLED(STATUS_WIFI_CONNECTING);
     #endif
+    
+    // Enable WiFi mode before connecting
+    WiFi.mode(WIFI_STA);
+    delay(100);  // Brief delay for mode change
     
     WiFi.begin(config_ssid.c_str(), config_password.c_str());
     Serial.print("Connecting to WiFi");
@@ -43,9 +49,14 @@ bool setupWifi() {
     logInfo("NETWORK", "WiFi connected - IP: " + WiFi.localIP().toString());
     
     wifiConnected = true;
+    ethernetConnected = false;  // Ensure Ethernet flag is clear
+    
+    // Sync time with NTP when WiFi connects
+    syncTimeWithNTP();
     
     #ifdef USE_RGB_LED
-    setStatusLED(STATUS_WIFI_CONNECTED);
+    setStatusLED(STATUS_WIFI_CONNECTED);  // Yellow LED for WiFi
+    Serial.println("LED: WiFi connected (yellow)");
     #endif
     
     printHome(true, false, false);

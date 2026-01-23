@@ -79,6 +79,11 @@ void flashTFT() {
 #else
 // Stub functions for devices without displays (including Waveshare)
 // Output to serial instead of display
+
+// Access network state flags from main sketch
+extern bool ethernetConnected;
+extern bool wifiConnected;
+
 void setupTFT() {
   #ifdef WAVESHARE
   Serial.println("Device has NO DISPLAY (headless operation)");
@@ -93,7 +98,16 @@ void printTFT(String message, int x, int y) {
 void printHome(bool wifi, bool ws, bool ping) {
   // Output status to serial
   Serial.println("=== Status Update ===");
-  Serial.printf("WiFi: %s\n", wifi ? "Connected" : "Disconnected");
+  
+  // Show actual network type (check global flags)
+  if (ethernetConnected) {
+    Serial.println("Network: Ethernet Connected");
+  } else if (wifiConnected) {
+    Serial.println("Network: WiFi Connected");
+  } else {
+    Serial.println("Network: Disconnected");
+  }
+  
   Serial.printf("WebSocket: %s\n", ws ? "Connected" : "Disconnected");
   if (ping) Serial.println("Ping received");
 }

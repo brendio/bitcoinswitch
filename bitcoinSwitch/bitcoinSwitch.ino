@@ -38,6 +38,12 @@ void flashPaymentLED();
 void updateStatusLED();
 LEDStatus getCurrentLEDStatus();
 
+// Forward declarations for NTP time sync functions (from 360_ntp_time.ino)
+bool syncTimeWithNTP();
+void maintainTimeSync();
+String getCurrentTimeString();
+time_t getCurrentTimestamp();
+
 String config_ssid;
 String config_password;
 String config_device_string;
@@ -147,6 +153,11 @@ void setup() {
     
     setupConfig();
     
+    // Disable WiFi by default (prevent auto-start)
+    // Will be explicitly enabled only if needed for fallback
+    WiFi.mode(WIFI_OFF);
+    Serial.println("WiFi disabled by default (Ethernet priority)");
+    
     // Network setup: Ethernet first, WiFi fallback
     bool networkConnected = false;
     
@@ -182,32 +193,27 @@ void setup() {
         return;
     }
     
+    // Wait for network to fully stabilize before starting WebSocket
+    Serial.println("Waiting for network to stabilize...");
+    delay(2000);
+    
     // Initialize digital input pins AFTER network setup
     // This prevents SPI/Ethernet initialization from affecting DI pins
     #ifdef WAVESHARE
-    Serial.println("Initializing digital input pins (INPUT_PULLDOWN)...");
+    Serial.println("Initializing digital input pins (INPUT_PULLUP for active-low)...");
     
-    // Detach from any alternate functions first
-    gpio_reset_pin((gpio_num_t)DI_PIN_1);
-    gpio_reset_pin((gpio_num_t)DI_PIN_2);
-    gpio_reset_pin((gpio_num_t)DI_PIN_3);
-    gpio_reset_pin((gpio_num_t)DI_PIN_4);
-    gpio_reset_pin((gpio_num_t)DI_PIN_5);
-    gpio_reset_pin((gpio_num_t)DI_PIN_6);
-    gpio_reset_pin((gpio_num_t)DI_PIN_7);
-    gpio_reset_pin((gpio_num_t)DI_PIN_8);
+    // Use DI_PINS array for cleaner iteration (demo pattern)
+    // INPUT_PULLUP: Pins pulled high, grounding them activates (active-low)
+    // Result: LED OFF when open, LED ON when grounded to DGND
+    for (int i = 0; i < DI_COUNT; i++) {
+        // Detach from any alternate functions first
+        gpio_reset_pin((gpio_num_t)DI_PINS[i]);
+        // Configure as input with pullup (active-low)
+        pinMode(DI_PINS[i], INPUT_PULLUP);
+    }
     
-    // Configure as inputs with pulldown
-    pinMode(DI_PIN_1, INPUT_PULLDOWN);
-    pinMode(DI_PIN_2, INPUT_PULLDOWN);
-    pinMode(DI_PIN_3, INPUT_PULLDOWN);
-    pinMode(DI_PIN_4, INPUT_PULLDOWN);
-    pinMode(DI_PIN_5, INPUT_PULLDOWN);
-    pinMode(DI_PIN_6, INPUT_PULLDOWN);
-    pinMode(DI_PIN_7, INPUT_PULLDOWN);
-    pinMode(DI_PIN_8, INPUT_PULLDOWN);
-    delay(100); // longer settling time after network init
-    Serial.println("Digital inputs configured after network setup");
+    delay(100); // Settling time after network init
+    Serial.printf("Digital inputs configured: GPIO %d-%d (active-low)\n", DI_PIN_1, DI_PIN_8);
     
     // Initialize Telegram notifications (if configured)
     initTelegram();
@@ -254,6 +260,9 @@ void loop() {
     
     loopWifi();
     webSocket.loop();
+    
+    // Maintain NTP time sync (retry if failed)
+    maintainTimeSync();
     
     // Update LED animations (pulse effect for websocket connected state)
     #ifdef USE_RGB_LED
@@ -383,7 +392,13 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
             #ifdef USE_RGB_LED
             // Revert to network layer status (ethernet/wifi indicator)
             // This shows the underlying network is still connected
-            setStatusLED(STATUS_ETHERNET_CONNECTED);  // Or WIFI_CONNECTED based on network
+            if (ethernetConnected) {
+                setStatusLED(STATUS_ETHERNET_CONNECTED);  // Green
+            } else if (wifiConnected) {
+                setStatusLED(STATUS_WIFI_CONNECTED);  // Yellow
+            } else {
+                setStatusLED(STATUS_NETWORK_ERROR);  // Red
+            }
             #endif
             break;
         case WStype_CONNECTED:

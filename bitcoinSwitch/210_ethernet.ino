@@ -1,162 +1,199 @@
 // ============================================
 // Ethernet Module for Waveshare ESP32-S3-ETH-8DI-8RO
-// W5500 Ethernet via SPI
+// W5500 Ethernet via SPI with Event-Driven Architecture
+// Based on Waveshare demo code (WS_ETH.cpp)
 // ============================================
 
 #ifdef USE_ETHERNET
 
-#include <Ethernet.h>
+#include <ETH.h>
 #include <SPI.h>
+#include <NetworkClientSecure.h>
 #include "device_config.h"
 
 // Global Ethernet state (ethernetConnected declared in main sketch)
 bool ethernetInitialized = false;
-unsigned long lastEthernetCheck = 0;
-const unsigned long ETHERNET_CHECK_INTERVAL = 5000; // Check every 5 seconds
+IPAddress ETH_ip;
 
-// Use HSPI (SPI2) for Ethernet to avoid conflicts with default SPI
-SPIClass SPI_Ethernet(HSPI);
-
-// MAC address for device (customize per device if needed)
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-
-// Static IP configuration (from config, optional)
-IPAddress staticIP;
-IPAddress staticGateway;
-IPAddress staticSubnet(255, 255, 255, 0);
-IPAddress staticDNS(8, 8, 8, 8);
+// FreeRTOS task handle
+TaskHandle_t ethernetTaskHandle = NULL;
 
 /**
- * Initialize Ethernet hardware (W5500)
- * Returns true if hardware initialized (doesn't require link)
+ * Ethernet Event Handler (demo-style architecture)
+ * Handles all Ethernet state changes via ESP32 event system
+ */
+void onEthernetEvent(arduino_event_id_t event, arduino_event_info_t info) {
+  switch (event) {
+    case ARDUINO_EVENT_ETH_START:
+      Serial.println("ETH Started");
+      ETH.setHostname("bitcoinswitch");  // Set device hostname
+      logInfo("NETWORK", "Ethernet hardware started");
+      break;
+      
+    case ARDUINO_EVENT_ETH_CONNECTED:
+      Serial.println("ETH Connected - cable detected");
+      logInfo("NETWORK", "Ethernet cable connected");
+      #ifdef USE_RGB_LED
+      setStatusLED(STATUS_ETHERNET_CONNECTING);
+      #endif
+      break;
+      
+    case ARDUINO_EVENT_ETH_GOT_IP:
+      Serial.printf("ETH Got IP from DHCP: %s\n", esp_netif_get_desc(info.got_ip.esp_netif));
+      ETH_ip = ETH.localIP();
+      Serial.printf("   IP Address: %d.%d.%d.%d\n", ETH_ip[0], ETH_ip[1], ETH_ip[2], ETH_ip[3]);
+      Serial.printf("   Subnet:     %s\n", ETH.subnetMask().toString().c_str());
+      Serial.printf("   Gateway:    %s\n", ETH.gatewayIP().toString().c_str());
+      Serial.printf("   DNS:        %s\n", ETH.dnsIP().toString().c_str());
+      
+      logInfo("NETWORK", "Ethernet connected - IP: " + ETH_ip.toString());
+      
+      // If WiFi was active as fallback, Ethernet takeover
+      if (wifiConnected) {
+        Serial.println("Ethernet restored - taking over from WiFi fallback");
+        logInfo("NETWORK", "Switching from WiFi to Ethernet (primary)");
+      }
+      
+      ethernetConnected = true;
+      wifiConnected = false;  // Clear WiFi flag - Ethernet is primary
+      
+      // Sync time with NTP (demo pattern)
+      syncTimeWithNTP();
+      
+      #ifdef USE_RGB_LED
+      setStatusLED(STATUS_ETHERNET_CONNECTED);
+      Serial.println("LED: Ethernet connected (green)");
+      #endif
+      break;
+      
+    case ARDUINO_EVENT_ETH_LOST_IP:
+      Serial.println("ETH Lost IP Address");
+      logWarning("NETWORK", "Ethernet lost IP address");
+      ethernetConnected = false;
+      
+      // Trigger WiFi fallback if available (after short delay)
+      delay(500);  // Brief delay to allow Ethernet recovery
+      if (!ethernetConnected && !wifiConnected && config_ssid != "" && config_password != "") {
+        Serial.println("Ethernet IP lost, attempting WiFi fallback...");
+        setupWifi();  // This will handle LED status and NTP sync
+      }
+      break;
+      
+    case ARDUINO_EVENT_ETH_DISCONNECTED:
+      Serial.println("ETH Disconnected - cable unplugged or link lost");
+      logWarning("NETWORK", "Ethernet cable disconnected");
+      ethernetConnected = false;
+      
+      // Trigger WiFi fallback if available
+      if (!wifiConnected && config_ssid != "" && config_password != "") {
+        Serial.println("Attempting WiFi fallback...");
+        setupWifi();  // This will handle LED status and NTP sync
+      } else {
+        #ifdef USE_RGB_LED
+        setStatusLED(STATUS_NETWORK_ERROR);
+        #endif
+      }
+      break;
+      
+    case ARDUINO_EVENT_ETH_STOP:
+      Serial.println("ETH Stopped");
+      logError("NETWORK", "Ethernet hardware stopped");
+      ethernetConnected = false;
+      break;
+      
+    default:
+      break;
+  }
+}
+
+/**
+ * FreeRTOS Task for Ethernet Monitoring (demo pattern)
+ * Monitors connection state and handles reconnection
+ */
+void EthernetTask(void *parameter) {
+  static bool eth_connected_old = false;
+  
+  while(1) {
+    // Detect state transitions
+    if (ethernetConnected && !eth_connected_old) {
+      eth_connected_old = ethernetConnected;
+      Serial.println("✅ Network port connected!");
+      logInfo("NETWORK", "Ethernet fully operational");
+      
+      #ifdef USE_RGB_LED
+      // Flash green to indicate successful connection
+      for(int i = 0; i < 3; i++) {
+        setStatusLED(STATUS_OFF);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        setStatusLED(STATUS_ETHERNET_CONNECTED);
+        vTaskDelay(pdMS_TO_TICKS(100));
+      }
+      #endif
+    }
+    else if (!ethernetConnected && eth_connected_old) {
+      eth_connected_old = ethernetConnected;
+      Serial.println("❌ Network port disconnected!");
+      logWarning("NETWORK", "Ethernet connection lost");
+    }
+    
+    vTaskDelay(pdMS_TO_TICKS(100));  // Check every 100ms
+  }
+  vTaskDelete(NULL);
+}
+
+/**
+ * Initialize Ethernet hardware (W5500 via SPI)
+ * Returns true if initialization successful
  */
 bool initEthernet() {
   Serial.println("\n=== Initializing Ethernet (W5500) ===");
+  Serial.printf("Using pins: CS=%d, SCK=%d, MISO=%d, MOSI=%d, RST=%d\n",
+                ETH_CS_PIN, ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_RST_PIN);
   
-  // Reset W5500 if reset pin is connected
-  if (ETH_RST_PIN > 0) {
-    pinMode(ETH_RST_PIN, OUTPUT);
-    digitalWrite(ETH_RST_PIN, LOW);
-    delay(10);
-    digitalWrite(ETH_RST_PIN, HIGH);
-    delay(50);
+  // Register event handler FIRST (before ETH.begin)
+  Network.onEvent(onEthernetEvent);
+  
+  // Initialize SPI bus for W5500
+  SPI.begin(ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN);
+  
+  // Initialize ETH class with W5500 parameters
+  // ETH.begin(PHY_TYPE, PHY_ADDR, CS_PIN, IRQ_PIN, RST_PIN, SPI_BUS)
+  bool success = ETH.begin(
+    ETH_PHY_W5500,     // W5500 chip
+    ETH_PHY_ADDR,      // PHY address (1)
+    ETH_CS_PIN,        // Chip Select
+    ETH_INT_PIN,       // Interrupt pin
+    ETH_RST_PIN,       // Reset pin
+    SPI                // SPI bus
+  );
+  
+  if (!success) {
+    Serial.println("❌ ERROR: ETH.begin() failed!");
+    logCritical("NETWORK", "Ethernet initialization failed - check wiring");
+    return false;
   }
   
-  // Initialize HSPI with correct pin mapping: SCK, MISO, MOSI, CS
-  // NOTE: Pin order matters - manufacturer uses (12, 13, 11, 10) but our board uses different pins
-  SPI_Ethernet.begin(ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_CS_PIN);
+  Serial.println("Ethernet hardware initialized");
+  logInfo("NETWORK", "W5500 initialized, waiting for cable...");
   
-  // Configure SPI settings for W5500
-  SPI_Ethernet.setFrequency(20000000);  // 20MHz - manufacturer's setting
-  SPI_Ethernet.setDataMode(SPI_MODE0);
-  SPI_Ethernet.setBitOrder(MSBFIRST);
-  
-  // Initialize Ethernet library with CS pin
-  Ethernet.init(ETH_CS_PIN);
-  
-  // Parse static IP config from strings if provided
-  bool useStaticIP = false;
-  if (config_static_ip != "" && config_static_ip != "0.0.0.0") {
-    if (staticIP.fromString(config_static_ip)) {
-      useStaticIP = true;
-      Serial.println("Static IP configured: " + config_static_ip);
-      
-      // Parse gateway and subnet if provided
-      if (config_static_gateway != "") {
-        staticGateway.fromString(config_static_gateway);
-      }
-      if (config_static_subnet != "") {
-        staticSubnet.fromString(config_static_subnet);
-      }
-    } else {
-      Serial.println("Warning: Invalid static IP format, using DHCP");
-    }
-  }
-  
-  // Initialize Ethernet with HSPI
-  Serial.print("Starting Ethernet on HSPI... ");
-  
-  if (useStaticIP) {
-    Ethernet.begin(mac, staticIP, staticDNS, staticGateway, staticSubnet);
-    Serial.println("(Static IP)");
-  } else {
-    Ethernet.begin(mac);
-    Serial.println("(DHCP)");
-  }
-  
-  // Give W5500 time to initialize
-  delay(1000);
+  // Create FreeRTOS monitoring task (demo pattern)
+  xTaskCreatePinnedToCore(
+    EthernetTask,         // Task function
+    "EthernetTask",       // Task name
+    4096,                 // Stack size
+    NULL,                 // Parameters
+    2,                    // Priority
+    &ethernetTaskHandle,  // Task handle
+    0                     // Core 0
+  );
   
   ethernetInitialized = true;
   return true;
 }
 
 /**
- * Check Ethernet connection status
- * Returns true if Ethernet has an IP and link is up
- */
-bool checkEthernetConnection() {
-  if (!ethernetInitialized) {
-    return false;
-  }
-  
-  // Check link status
-  auto linkStatus = Ethernet.linkStatus();
-  
-  if (linkStatus == LinkOFF) {
-    if (ethernetConnected) {
-      Serial.println("⚠️  Ethernet cable disconnected");
-      ethernetConnected = false;
-      #ifdef USE_RGB_LED
-      setStatusLED(STATUS_NETWORK_ERROR);
-      #endif
-    }
-    return false;
-  }
-  
-  if (linkStatus == LinkON) {
-    // Check if we have an IP address
-    IPAddress ip = Ethernet.localIP();
-    
-    if (ip[0] == 0) {
-      // No IP yet (DHCP still negotiating)
-      if (ethernetConnected) {
-        Serial.println("⚠️  Ethernet link up but no IP address");
-        ethernetConnected = false;
-      }
-      return false;
-    }
-    
-    // We have link and IP
-    if (!ethernetConnected) {
-      Serial.println("✅ Ethernet connected!");
-      Serial.print("   IP address: ");
-      Serial.println(ip);
-      Serial.print("   Subnet mask: ");
-      Serial.println(Ethernet.subnetMask());
-      Serial.print("   Gateway: ");
-      Serial.println(Ethernet.gatewayIP());
-      Serial.print("   DNS: ");
-      Serial.println(Ethernet.dnsServerIP());
-      
-      logInfo("NETWORK", "Ethernet connected - IP: " + ip.toString());
-      
-      ethernetConnected = true;
-      
-      #ifdef USE_RGB_LED
-      setStatusLED(STATUS_ETHERNET_CONNECTED);
-      #endif
-    }
-    return true;
-  }
-  
-  // Unknown link status
-  return false;
-}
-
-/**
- * Setup Ethernet connection
- * Call this once at startup
+ * Setup Ethernet (called from main setup)
+ * Waits for actual connection (IP address) before returning
  */
 bool setupEthernet() {
   #ifdef USE_RGB_LED
@@ -164,61 +201,42 @@ bool setupEthernet() {
   #endif
   
   if (!initEthernet()) {
-    Serial.println("❌ Ethernet hardware initialization failed");
+    return false;  // Hardware init failed
+  }
+  
+  // Wait up to 10 seconds for Ethernet to connect and get IP
+  Serial.println("Waiting for Ethernet connection...");
+  int attempts = 0;
+  while (!ethernetConnected && attempts < 100) {
+    delay(100);
+    attempts++;
+    if (attempts % 10 == 0) {
+      Serial.print(".");
+    }
+  }
+  
+  if (ethernetConnected) {
+    Serial.println(" connected!");
+    return true;
+  } else {
+    Serial.println(" timeout");
+    Serial.println("❌ Ethernet connection timeout (no cable or DHCP failed)");
     return false;
   }
-  
-  // Wait up to 10 seconds for connection
-  Serial.print("Waiting for Ethernet connection");
-  for (int i = 0; i < 20; i++) {
-    if (checkEthernetConnection()) {
-      Serial.println(" connected!");
-      return true;
-    }
-    Serial.print(".");
-    delay(500);
-  }
-  
-  Serial.println(" timeout");
-  Serial.println("ℹ️  No Ethernet connection (cable may not be plugged in)");
-  return false;
 }
 
 /**
- * Maintain Ethernet connection
- * Call this in loop() periodically
+ * Maintain Ethernet Connection (called from main loop)
+ * Note: With event-driven architecture, this is mostly passive
+ * The FreeRTOS task and event handlers manage state automatically
  */
 void maintainEthernet() {
-  if (!ethernetInitialized) {
-    return;
-  }
+  // With ETH class + events, no active maintenance needed
+  // Connection state is updated automatically via onEthernetEvent()
+  // The FreeRTOS EthernetTask monitors for state changes
   
-  // Check connection status periodically
-  unsigned long now = millis();
-  if (now - lastEthernetCheck >= ETHERNET_CHECK_INTERVAL) {
-    lastEthernetCheck = now;
-    
-    // Maintain DHCP lease
-    Ethernet.maintain();
-    
-    // Check if connection state changed
-    checkEthernetConnection();
-  }
-}
-
-#else
-// Stub functions when Ethernet is not enabled
-
-bool setupEthernet() {
-  return false;
-}
-
-bool checkEthernetConnection() {
-  return false;
-}
-
-void maintainEthernet() {
-  // No-op
+  // Optional: DHCP lease renewal (ETH class handles this internally)
+  // No explicit action required here
 }
 
 #endif // USE_ETHERNET
