@@ -95,12 +95,7 @@ void setupConfig(){
     String timeout_str = getJsonValue(doc, "di_check_timeout_ms", "2000");
     di_check_timeout_ms = timeout_str.toInt();
     
-    // Parse DI relay input mapping (relay 1-8 to DI pin)
-    for (int i = 0; i < 8; i++) {
-        String key = "di_relay_" + String(i + 1) + "_input";
-        String val = getJsonValue(doc, key.c_str(), "0");
-        di_relay_input_map[i] = val.toInt();
-    }
+    // DI monitoring uses 1:1 mapping (Relay N → DI N) - no config needed
     
     // Logging configuration (optional)
     String log_enabled = getJsonValue(doc, "logging_enabled", "true");

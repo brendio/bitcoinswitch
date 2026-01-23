@@ -65,7 +65,6 @@ String device_name = "Waveshare-01";
 // DI monitoring configuration
 bool di_monitor_enabled = false;
 int di_check_timeout_ms = 2000;
-int di_relay_input_map[8] = {0, 0, 0, 0, 0, 0, 0, 0}; // Relay 1-8 to DI pin mapping
 
 // Logging configuration
 bool logging_enabled = true;

@@ -25,16 +25,9 @@
   "config_threshold_time": "",
   
   "_comment_di_monitoring": "Digital Input monitoring after relay triggers (optional)",
+  "_comment_di_note": "Uses 1:1 mapping: Relay 1 → DI 1, Relay 2 → DI 2, etc. (hardcoded)",
   "di_monitor_enabled": "false",
   "di_check_timeout_ms": "2000",
-  "di_relay_1_input": "1",
-  "di_relay_2_input": "2",
-  "di_relay_3_input": "3",
-  "di_relay_4_input": "4",
-  "di_relay_5_input": "5",
-  "di_relay_6_input": "6",
-  "di_relay_7_input": "7",
-  "di_relay_8_input": "8",
   
   "_comment_logging": "Event logging configuration (optional)",
   "logging_enabled": "true",

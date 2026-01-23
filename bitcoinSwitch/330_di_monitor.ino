@@ -45,36 +45,35 @@ bool checkDIStateChange(int diPin, int timeout_ms) {
 /**
  * Monitor DI after relay trigger
  * Called from executePayment() after relay is activated
+ * Uses 1:1 mapping: Relay 1 → DI 1, Relay 2 → DI 2, etc.
  */
 void monitorDIAfterRelay(int relayNum, int duration_ms) {
   if (!di_monitor_enabled) {
     return;
   }
   
-  // Get the DI pin mapped to this relay (relayNum is 1-based)
-  int diPin = 0;
-  if (relayNum >= 1 && relayNum <= 8) {
-    diPin = di_relay_input_map[relayNum - 1];
-  }
-  
-  if (diPin == 0) {
-    Serial.printf("No DI monitoring configured for Relay %d\n", relayNum);
+  // Waveshare hardware: 1:1 mapping (Relay N → DI N)
+  // relayNum is 1-based (1-8), DI_PINS array is 0-based
+  if (relayNum < 1 || relayNum > 8) {
+    Serial.printf("Invalid relay number: %d\n", relayNum);
     return;
   }
   
-  Serial.printf("DI monitoring enabled for Relay %d -> DI pin %d\n", relayNum, diPin);
+  int diPin = DI_PINS[relayNum - 1];  // Direct mapping
+  
+  Serial.printf("DI monitoring: Relay %d -> DI %d (GPIO %d)\n", relayNum, relayNum, diPin);
   
   // Check if DI state changed
   bool success = checkDIStateChange(diPin, di_check_timeout_ms);
   
   if (success) {
-    Serial.printf("✅ DI monitoring: Relay %d -> DI %d OK\n", relayNum, diPin);
-    logInfo("DI_MONITOR", "Relay " + String(relayNum) + " -> DI " + String(diPin) + " OK");
-    sendTelegramDISuccess(relayNum, diPin);
+    Serial.printf("✅ DI monitoring: Relay %d -> DI %d OK\n", relayNum, relayNum);
+    logInfo("DI_MONITOR", "Relay " + String(relayNum) + " -> DI " + String(relayNum) + " OK");
+    sendTelegramDISuccess(relayNum, relayNum);
   } else {
-    Serial.printf("❌ DI monitoring: Relay %d -> DI %d FAILED\n", relayNum, diPin);
-    logError("DI_MONITOR", "Relay " + String(relayNum) + " -> DI " + String(diPin) + " FAILED - No state change");
-    sendTelegramDIFailure(relayNum, diPin);
+    Serial.printf("❌ DI monitoring: Relay %d -> DI %d FAILED\n", relayNum, relayNum);
+    logError("DI_MONITOR", "Relay " + String(relayNum) + " -> DI " + String(relayNum) + " FAILED - No state change");
+    sendTelegramDIFailure(relayNum, relayNum);
   }
 }
 

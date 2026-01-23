@@ -62,7 +62,17 @@ def create_default_template(path):
         "config_threshold_inkey": "",
         "config_threshold_amount": "",
         "config_threshold_pin": "",
-        "config_threshold_time": ""
+        "config_threshold_time": "",
+        
+        "_comment_di_monitoring": "Digital Input monitoring (optional, uses 1:1 mapping)",
+        "di_monitor_enabled": "false",
+        "di_check_timeout_ms": "2000",
+        
+        "_comment_logging": "Event logging configuration (optional)",
+        "logging_enabled": "true",
+        "log_retention_hours": "168",
+        "syslog_server": "",
+        "syslog_port": "514"
     }
     
     with open(path, 'w') as f:
