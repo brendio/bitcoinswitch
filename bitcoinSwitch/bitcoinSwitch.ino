@@ -43,6 +43,7 @@ bool syncTimeWithNTP();
 void maintainTimeSync();
 String getCurrentTimeString();
 time_t getCurrentTimestamp();
+extern bool timeIsSynced;  // Global state from 360_ntp_time.ino
 
 String config_ssid;
 String config_password;
@@ -252,6 +253,29 @@ void setup() {
 }
 
 void loop() {
+    // Check for serial commands (reset, debug, etc.)
+    if (Serial.available() > 0) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        
+        // Reset/reboot command (works in normal mode)
+        if (cmd == "/reset" || cmd == "/reboot") {
+            Serial.println("Received reset command - rebooting device...");
+            Serial.flush();
+            delay(100);
+            ESP.restart();
+        }
+        
+        // Debug command to show status
+        if (cmd == "/status") {
+            Serial.println("=== Device Status ===");
+            Serial.printf("Ethernet: %s\n", ethernetConnected ? "Connected" : "Disconnected");
+            Serial.printf("WiFi: %s\n", wifiConnected ? "Connected" : "Disconnected");
+            Serial.printf("Time synced: %s\n", timeIsSynced ? "Yes" : "No");
+            Serial.printf("Uptime: %lu seconds\n", millis() / 1000);
+        }
+    }
+    
     // Maintain network connections
     #ifdef USE_ETHERNET
     maintainEthernet();
