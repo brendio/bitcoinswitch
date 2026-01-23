@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 
 DEFAULT_PORT = "/dev/cu.usbmodem101"
-CONFIG_FILE = "config_template.json"
+CONFIG_FILE = "config_local.json"
 BAUDRATE = 115200
 TIMEOUT = 2
 

@@ -2,9 +2,9 @@
   "_comment": "bitcoinSwitch Configuration Template - Edit values below and save",
   "_comment_instructions": "Run: python3 configure_device.py to write config to device",
   
-  "config_ssid": "WiFi-30DCF1",
-  "config_password": "aZveCndYJLU5wbX5",
-  "config_device_string": "wss://lnvault.mineracks.com/api/v1/ws/XYy9CWVaVxghaESJApADun",
+  "config_ssid": "",
+  "config_password": "",
+  "config_device_string": "",
   
   "_comment_optional": "Optional parameters - leave empty (blank string) to disable features",
   "telegram_bot_token": "",
