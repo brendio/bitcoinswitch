@@ -190,6 +190,27 @@ bool executeConfig() {
   if (Serial.available() == 0) return false;
   String data = Serial.readStringUntil('\n');
   Serial.println("received serial data: " + data);
+  
+  // Reset/reboot command
+  if (data == "/reset" || data == "/reboot") {
+    Serial.println("Rebooting device...");
+    Serial.flush();
+    delay(100);
+    ESP.restart();
+  }
+  
+  // List files command (for config mode detection)
+  if (data == "/file-list") {
+    Serial.println("Config mode active - available commands:");
+    Serial.println("  /file-list, /file-read, /file-append, /file-remove, /reset, /config-done");
+    if (SPIFFS.exists(CONFIG_FILE)) {
+      Serial.println("Config file: /elements.json exists");
+    } else {
+      Serial.println("Config file: /elements.json not found");
+    }
+    return false;
+  }
+  
   if (data == "/config-done") {
     delay(1000);
     return true;

@@ -119,17 +119,183 @@ def validate_config(config):
     
     return errors, warnings
 
+def check_config_mode(ser, timeout=3.0):
+    """Check if device is in config mode and ready to accept commands"""
+    print("🔍 Checking if device is in config mode...")
+    
+    # Flush buffers
+    ser.reset_input_buffer()
+    ser.reset_output_buffer()
+    
+    # Send file-list command (safe, doesn't modify anything)
+    ser.write(b'/file-list\n')
+    time.sleep(0.5)
+    
+    # Read response
+    start_time = time.time()
+    response_lines = []
+    while time.time() - start_time < timeout:
+        if ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8', errors='ignore').strip()
+            if line:
+                response_lines.append(line)
+                # Don't print every line during detection
+        else:
+            time.sleep(0.1)
+    
+    # Check for config mode indicators
+    if not response_lines:
+        return False, "No response from device"
+    
+    response_text = ' '.join(response_lines).lower()
+    
+    # Look for config mode markers
+    if 'config mode' in response_text or 'available commands' in response_text or 'file-list' in response_text:
+        return True, "Device is in config mode"
+    
+    # Check if device is running normally (not in config mode)
+    if any(indicator in response_text for indicator in ['wifi', 'ethernet', 'websocket', 'connected', 'network']):
+        return False, "Device is running normally (not in config mode)"
+    
+    # Unknown state
+    return False, "Could not determine device state"
+
+def prompt_config_mode_entry():
+    """Guide user to enter config mode"""
+    print("\n⚠️  Device is not in config mode!")
+    print("\n📖 To enter config mode:")
+    print("   • Device auto-enters if no valid config exists")
+    print("   • OR power cycle and look for BLUE FAST BLINK LED")
+    print("   • OR send reset command (option 't' below)")
+    print("\nOptions:")
+    print("   [r] Retry detection (if config mode is now active)")
+    print("   [t] Trigger reset to enter config mode")
+    print("   [w] Wait 10 seconds and retry")
+    print("   [q] Quit")
+    
+    choice = input("\nYour choice [r/t/w/q]: ").lower()
+    return choice
+
+def reset_device_software(ser):
+    """Send software reset command to device"""
+    print("🔄 Sending software reset command...")
+    ser.write(b'/reset\n')
+    time.sleep(0.3)
+    
+    # Read any response
+    response = []
+    while ser.in_waiting > 0:
+        line = ser.readline().decode('utf-8', errors='ignore').strip()
+        if line:
+            response.append(line)
+            print(f"  {line}")
+    
+    if response and 'reboot' in ' '.join(response).lower():
+        print("✅ Software reset command acknowledged")
+        time.sleep(2.5)  # Wait for device to reboot
+        return True
+    else:
+        print("⚠️  No response to software reset")
+        return False
+
+def reset_device_hardware(ser):
+    """Reset device using DTR/RTS pins (hardware method)"""
+    print("🔄 Attempting hardware reset via DTR/RTS...")
+    try:
+        ser.setDTR(False)
+        ser.setRTS(True)
+        time.sleep(0.1)
+        ser.setRTS(False)
+        time.sleep(0.1)
+        ser.setDTR(True)
+        time.sleep(2.5)  # Wait for boot
+        print("✅ Hardware reset complete")
+        return True
+    except Exception as e:
+        print(f"⚠️  Hardware reset failed: {e}")
+        return False
+
+def reset_device(ser):
+    """Reset device using software command, fallback to hardware"""
+    # Try software reset first
+    if reset_device_software(ser):
+        return True
+    
+    # Fallback to hardware reset
+    print("Trying hardware reset as fallback...")
+    return reset_device_hardware(ser)
+
 def write_config_to_device(port, config):
     """Write configuration to device via serial"""
     print(f"📡 Connecting to {port}...")
     
     try:
         ser = serial.Serial(port, BAUDRATE, timeout=TIMEOUT)
-        time.sleep(0.5)  # Let serial settle
+        time.sleep(1.0)  # Let serial settle
         
         # Flush any pending data
         ser.reset_input_buffer()
         ser.reset_output_buffer()
+        
+        # CHECK CONFIG MODE
+        is_config_mode, status_msg = check_config_mode(ser)
+        
+        if not is_config_mode:
+            print(f"❌ {status_msg}")
+            
+            # Interactive retry loop
+            while True:
+                choice = prompt_config_mode_entry()
+                
+                if choice == 'r':
+                    # Retry detection
+                    is_config_mode, status_msg = check_config_mode(ser)
+                    if is_config_mode:
+                        print(f"✅ {status_msg}")
+                        break
+                    else:
+                        print(f"❌ {status_msg}")
+                        continue
+                
+                elif choice == 't':
+                    # Trigger reset
+                    if reset_device(ser):
+                        print("⏳ Waiting for device to enter config mode...")
+                        time.sleep(1.0)
+                        is_config_mode, status_msg = check_config_mode(ser)
+                        if is_config_mode:
+                            print(f"✅ {status_msg}")
+                            break
+                        else:
+                            print(f"❌ {status_msg}")
+                            print("💡 Device may need to be manually power cycled")
+                            continue
+                    else:
+                        print("❌ Reset failed")
+                        continue
+                
+                elif choice == 'w':
+                    # Wait and retry
+                    print("\n⏳ Waiting 10 seconds...")
+                    time.sleep(10)
+                    is_config_mode, status_msg = check_config_mode(ser)
+                    if is_config_mode:
+                        print(f"✅ {status_msg}")
+                        break
+                    else:
+                        print(f"❌ {status_msg}")
+                        continue
+                
+                elif choice == 'q':
+                    print("❌ Cancelled by user")
+                    ser.close()
+                    return False
+                
+                else:
+                    print("Invalid choice")
+                    continue
+        else:
+            print(f"✅ {status_msg}")
         
         print("🗑️  Removing old config...")
         ser.write(b'/file-remove /elements.json\n')
@@ -207,22 +373,17 @@ def write_config_to_device(port, config):
                 except json.JSONDecodeError as e:
                     print(f"\n⚠️  Warning: JSON validation failed - {e}")
         
-        print("\n🔄 Completing configuration (device will reboot)...")
-        ser.write(b'/config-done\n')
-        time.sleep(1.0)
+        print("\n🔄 Rebooting device with new configuration...")
         
-        # Read reboot messages
-        reboot_count = 0
-        while ser.in_waiting > 0:
-            line = ser.readline().decode('utf-8', errors='ignore').strip()
-            if line:
-                print(f"  {line}")
-                reboot_count += 1
-        
-        if reboot_count > 0:
+        # Use software reset instead of /config-done
+        if reset_device_software(ser):
             print("\n✅ Configuration complete! Device is rebooting...")
         else:
-            print("\n✅ Configuration sent! Device should reboot now...")
+            print("\n⚠️  Reset command may not have worked, trying hardware reset...")
+            if reset_device_hardware(ser):
+                print("\n✅ Configuration complete! Device is rebooting...")
+            else:
+                print("\n⚠️  Device may need manual reset - configuration is saved")
         
         print(f"📊 Monitor device: arduino-cli monitor -p {port} -c baudrate=115200")
         
