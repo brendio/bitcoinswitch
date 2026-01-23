@@ -14,6 +14,9 @@ bool ethernetInitialized = false;
 unsigned long lastEthernetCheck = 0;
 const unsigned long ETHERNET_CHECK_INTERVAL = 5000; // Check every 5 seconds
 
+// Use HSPI (SPI2) for Ethernet to avoid conflicts with default SPI
+SPIClass SPI_Ethernet(HSPI);
+
 // MAC address for device (customize per device if needed)
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 
@@ -30,9 +33,6 @@ IPAddress staticDNS(8, 8, 8, 8);
 bool initEthernet() {
   Serial.println("\n=== Initializing Ethernet (W5500) ===");
   
-  // Initialize SPI for W5500
-  SPI.begin(ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_CS_PIN);
-  
   // Reset W5500 if reset pin is connected
   if (ETH_RST_PIN > 0) {
     pinMode(ETH_RST_PIN, OUTPUT);
@@ -41,6 +41,18 @@ bool initEthernet() {
     digitalWrite(ETH_RST_PIN, HIGH);
     delay(50);
   }
+  
+  // Initialize HSPI with correct pin mapping: SCK, MISO, MOSI, CS
+  // NOTE: Pin order matters - manufacturer uses (12, 13, 11, 10) but our board uses different pins
+  SPI_Ethernet.begin(ETH_SCK_PIN, ETH_MISO_PIN, ETH_MOSI_PIN, ETH_CS_PIN);
+  
+  // Configure SPI settings for W5500
+  SPI_Ethernet.setFrequency(20000000);  // 20MHz - manufacturer's setting
+  SPI_Ethernet.setDataMode(SPI_MODE0);
+  SPI_Ethernet.setBitOrder(MSBFIRST);
+  
+  // Initialize Ethernet library with CS pin
+  Ethernet.init(ETH_CS_PIN);
   
   // Parse static IP config from strings if provided
   bool useStaticIP = false;
@@ -61,8 +73,8 @@ bool initEthernet() {
     }
   }
   
-  // Initialize Ethernet
-  Serial.print("Starting Ethernet... ");
+  // Initialize Ethernet with HSPI
+  Serial.print("Starting Ethernet on HSPI... ");
   
   if (useStaticIP) {
     Ethernet.begin(mac, staticIP, staticDNS, staticGateway, staticSubnet);
@@ -126,6 +138,8 @@ bool checkEthernetConnection() {
       Serial.println(Ethernet.gatewayIP());
       Serial.print("   DNS: ");
       Serial.println(Ethernet.dnsServerIP());
+      
+      logInfo("NETWORK", "Ethernet connected - IP: " + ip.toString());
       
       ethernetConnected = true;
       

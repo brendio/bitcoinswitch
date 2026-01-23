@@ -50,6 +50,7 @@ public:
         if (error != 0) {
             Serial.println("ERROR: TCA9554 not found at address 0x20!");
             Serial.printf("I2C error code: %d\n", error);
+            logCritical("RELAY", "TCA9554 not found - relay control unavailable (I2C error: " + String(error) + ")");
             return false;
         }
         Serial.println("TCA9554 I2C expander found");

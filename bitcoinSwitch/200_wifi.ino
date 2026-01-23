@@ -40,6 +40,8 @@ bool setupWifi() {
     Serial.print(WiFi.RSSI());
     Serial.println(" dBm");
     
+    logInfo("NETWORK", "WiFi connected - IP: " + WiFi.localIP().toString());
+    
     wifiConnected = true;
     
     #ifdef USE_RGB_LED

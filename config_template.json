@@ -2,8 +2,8 @@
   "_comment": "bitcoinSwitch Configuration Template - Edit values below and save",
   "_comment_instructions": "Run: python3 configure_device.py to write config to device",
   
-  "config_ssid": "Pool",
-  "config_password": "PoolTable",
+  "config_ssid": "WiFi-30DCF1",
+  "config_password": "aZveCndYJLU5wbX5",
   "config_device_string": "wss://lnvault.mineracks.com/api/v1/ws/XYy9CWVaVxghaESJApADun",
   
   "_comment_optional": "Optional parameters - leave empty (blank string) to disable features",
@@ -22,5 +22,23 @@
   "config_threshold_inkey": "",
   "config_threshold_amount": "",
   "config_threshold_pin": "",
-  "config_threshold_time": ""
+  "config_threshold_time": "",
+  
+  "_comment_di_monitoring": "Digital Input monitoring after relay triggers (optional)",
+  "di_monitor_enabled": "false",
+  "di_check_timeout_ms": "2000",
+  "di_relay_1_input": "1",
+  "di_relay_2_input": "2",
+  "di_relay_3_input": "3",
+  "di_relay_4_input": "4",
+  "di_relay_5_input": "5",
+  "di_relay_6_input": "6",
+  "di_relay_7_input": "7",
+  "di_relay_8_input": "8",
+  
+  "_comment_logging": "Event logging configuration (optional)",
+  "logging_enabled": "true",
+  "log_retention_hours": "168",
+  "syslog_server": "",
+  "syslog_port": "514"
 }

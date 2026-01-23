@@ -59,6 +59,7 @@ void setupConfig(){
     if(error){
         Serial.print("deserializeJson() failed: ");
         Serial.println(error.c_str());
+        logError("CONFIG", "JSON parse error: " + String(error.c_str()));
     }
 
     config_ssid = getJsonValue(doc, "config_ssid", CONFIG_SSID);
@@ -82,6 +83,33 @@ void setupConfig(){
     config_static_ip = getJsonValue(doc, "static_ip", "");
     config_static_gateway = getJsonValue(doc, "static_gateway", "");
     config_static_subnet = getJsonValue(doc, "static_subnet", "255.255.255.0");
+    
+    // Telegram configuration (optional)
+    telegram_bot_token = getJsonValue(doc, "telegram_bot_token", "");
+    telegram_chat_id = getJsonValue(doc, "telegram_chat_id", "");
+    device_name = getJsonValue(doc, "device_name", "Waveshare-01");
+    
+    // DI monitoring configuration (optional)
+    String di_enabled = getJsonValue(doc, "di_monitor_enabled", "false");
+    di_monitor_enabled = (di_enabled == "true" || di_enabled == "1");
+    String timeout_str = getJsonValue(doc, "di_check_timeout_ms", "2000");
+    di_check_timeout_ms = timeout_str.toInt();
+    
+    // Parse DI relay input mapping (relay 1-8 to DI pin)
+    for (int i = 0; i < 8; i++) {
+        String key = "di_relay_" + String(i + 1) + "_input";
+        String val = getJsonValue(doc, key.c_str(), "0");
+        di_relay_input_map[i] = val.toInt();
+    }
+    
+    // Logging configuration (optional)
+    String log_enabled = getJsonValue(doc, "logging_enabled", "true");
+    logging_enabled = (log_enabled == "true" || log_enabled == "1");
+    String retention = getJsonValue(doc, "log_retention_hours", "168");
+    log_retention_hours = retention.toInt();
+    syslog_server = getJsonValue(doc, "syslog_server", "");
+    String port_str = getJsonValue(doc, "syslog_port", "514");
+    syslog_port = port_str.toInt();
 }
 
 String readConfig() {

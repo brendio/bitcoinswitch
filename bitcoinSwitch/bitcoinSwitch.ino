@@ -23,6 +23,14 @@ enum LEDStatus {
   STATUS_ERROR
 };
 
+// Log levels (for logging system)
+enum LogLevel {
+  LOG_INFO,
+  LOG_WARNING,
+  LOG_ERROR,
+  LOG_CRITICAL
+};
+
 // Forward declarations for LED functions (from 340_status_led.ino)
 void initStatusLED();
 void setStatusLED(LEDStatus status);
@@ -42,6 +50,22 @@ int config_threshold_time;
 String config_static_ip = "";
 String config_static_gateway = "";
 String config_static_subnet = "255.255.255.0";
+
+// Telegram notification configuration
+String telegram_bot_token = "";
+String telegram_chat_id = "";
+String device_name = "Waveshare-01";
+
+// DI monitoring configuration
+bool di_monitor_enabled = false;
+int di_check_timeout_ms = 2000;
+int di_relay_input_map[8] = {0, 0, 0, 0, 0, 0, 0, 0}; // Relay 1-8 to DI pin mapping
+
+// Logging configuration
+bool logging_enabled = true;
+int log_retention_hours = 168; // 7 days default
+String syslog_server = "";
+int syslog_port = 514;
 
 // Network state tracking
 bool ethernetConnected = false;
@@ -99,6 +123,9 @@ void setup() {
     Serial.println("DEBUG: Skipping LED init - USE_RGB_LED not defined");
     #endif
     
+    // Initialize logging system
+    initLogging();
+    
     // Initialize I2C relay controller (Waveshare)
     #ifdef WAVESHARE
     if (!initRelayController()) {
@@ -147,12 +174,44 @@ void setup() {
     
     if (!networkConnected) {
         Serial.println("❌ No network connection available!");
+        logCritical("NETWORK", "No network connection - Ethernet and WiFi both failed");
         #ifdef USE_RGB_LED
         setStatusLED(STATUS_NETWORK_ERROR);
         #endif
         printTFT("No network!", 21, 95);
         return;
     }
+    
+    // Initialize digital input pins AFTER network setup
+    // This prevents SPI/Ethernet initialization from affecting DI pins
+    #ifdef WAVESHARE
+    Serial.println("Initializing digital input pins (INPUT_PULLDOWN)...");
+    
+    // Detach from any alternate functions first
+    gpio_reset_pin((gpio_num_t)DI_PIN_1);
+    gpio_reset_pin((gpio_num_t)DI_PIN_2);
+    gpio_reset_pin((gpio_num_t)DI_PIN_3);
+    gpio_reset_pin((gpio_num_t)DI_PIN_4);
+    gpio_reset_pin((gpio_num_t)DI_PIN_5);
+    gpio_reset_pin((gpio_num_t)DI_PIN_6);
+    gpio_reset_pin((gpio_num_t)DI_PIN_7);
+    gpio_reset_pin((gpio_num_t)DI_PIN_8);
+    
+    // Configure as inputs with pulldown
+    pinMode(DI_PIN_1, INPUT_PULLDOWN);
+    pinMode(DI_PIN_2, INPUT_PULLDOWN);
+    pinMode(DI_PIN_3, INPUT_PULLDOWN);
+    pinMode(DI_PIN_4, INPUT_PULLDOWN);
+    pinMode(DI_PIN_5, INPUT_PULLDOWN);
+    pinMode(DI_PIN_6, INPUT_PULLDOWN);
+    pinMode(DI_PIN_7, INPUT_PULLDOWN);
+    pinMode(DI_PIN_8, INPUT_PULLDOWN);
+    delay(100); // longer settling time after network init
+    Serial.println("Digital inputs configured after network setup");
+    
+    // Initialize Telegram notifications (if configured)
+    initTelegram();
+    #endif
 
     pinMode(2, OUTPUT); // To blink on board LED
 
@@ -246,10 +305,27 @@ void executePayment(uint8_t *payload) {
   
   if (relayNum < RELAY_COUNT) {
       Serial.printf("Triggering Relay %d for %d ms\n", relayNum + 1, time);
+      
+      // Log payment event
+      String logMsg = "Relay " + String(relayNum + 1) + " triggered for " + String(time) + "ms";
+      if (comment != "") {
+        logMsg += " (" + comment + ")";
+      }
+      logInfo("PAYMENT", logMsg);
+      
+      // Send Telegram payment notification
+      sendTelegramPaymentAlert(relayNum + 1, time, comment);
+      
       #ifdef USE_RGB_LED
       setStatusLED(STATUS_RELAY_TRIGGERED);
       #endif
+      
+      // Trigger the relay
       triggerRelay(relayNum, time);
+      
+      // Monitor DI state change after relay trigger
+      monitorDIAfterRelay(relayNum + 1, time);
+      
       #ifdef USE_RGB_LED
       setStatusLED(STATUS_WEBSOCKET_CONNECTED);  // Return to pulse
       #endif
@@ -294,6 +370,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
     switch (type) {
         case WStype_ERROR:
             Serial.printf("[WebSocket] Error: %s\n", payload);
+            logError("WEBSOCKET", "Connection error: " + String((char*)payload));
             printHome(true, false, false);
             #ifdef USE_RGB_LED
             setStatusLED(STATUS_ERROR);
@@ -301,6 +378,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
             break;
         case WStype_DISCONNECTED:
             Serial.println("[WebSocket] Disconnected!\n");
+            logWarning("WEBSOCKET", "Disconnected from server");
             printHome(true, false, false);
             #ifdef USE_RGB_LED
             // Revert to network layer status (ethernet/wifi indicator)
@@ -310,6 +388,7 @@ void webSocketEvent(WStype_t type, uint8_t *payload, size_t length) {
             break;
         case WStype_CONNECTED:
             Serial.printf("[WebSocket] Connected to url: %s\n", payload);
+            logInfo("WEBSOCKET", "Connected to " + String((char*)payload));
             // send message to server when Connected
             webSocket.sendTXT("Connected");
             printHome(true, true, false);
