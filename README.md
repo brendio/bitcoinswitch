@@ -1,5 +1,5 @@
 
-![Waveshare ESP32-S3-ETH-8DI-8RO](ESP32-S3-ETH-8DI-8RO.jpg)
+![Waveshare ESP32-S3-ETH-8DI-8RO](./images/ESP32-S3-ETH-8DI-8RO.jpg)
 
 
 This fork extends the original lnbits/bitcoinswitch with major new features and hardware support:
