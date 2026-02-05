@@ -1,5 +1,7 @@
 This fork extends the original lnbits/bitcoinswitch with major new features and hardware support:
 
+![Waveshare 8CH Relay Outputs and 8CH Digital Inputs](https://www.waveshare.com/wiki/File:ESP32-S3-ETH-8DI-8RO-details-size-1.jpg)
+
 ## Waveshare ESP32-S3-ETH-8DI-8RO Support
 
 - Native support for Waveshare relay board (8 relays, 8 digital inputs)
