@@ -298,7 +298,7 @@ def write_config_to_device(port, config):
             print(f"✅ {status_msg}")
         
         print("🗑️  Removing old config...")
-        ser.write(b'/file-remove /elements.json\n')
+        ser.write(b'/file-remove\n')
         time.sleep(0.5)
         
         # Clear any response
@@ -373,17 +373,18 @@ def write_config_to_device(port, config):
                 except json.JSONDecodeError as e:
                     print(f"\n⚠️  Warning: JSON validation failed - {e}")
         
-        print("\n🔄 Rebooting device with new configuration...")
+        print("\n✅ Finalizing configuration...")
+        ser.write(b'/config-done\n')
+        ser.flush()
+        time.sleep(0.5)
         
-        # Use software reset instead of /config-done
-        if reset_device_software(ser):
-            print("\n✅ Configuration complete! Device is rebooting...")
-        else:
-            print("\n⚠️  Reset command may not have worked, trying hardware reset...")
-            if reset_device_hardware(ser):
-                print("\n✅ Configuration complete! Device is rebooting...")
-            else:
-                print("\n⚠️  Device may need manual reset - configuration is saved")
+        # Read final response
+        while ser.in_waiting > 0:
+            line = ser.readline().decode('utf-8', errors='ignore').strip()
+            if line:
+                print(f"  {line}")
+        
+        print("\n✅ Configuration complete! Device will exit config mode.")
         
         print(f"📊 Monitor device: arduino-cli monitor -p {port} -c baudrate=115200")
         

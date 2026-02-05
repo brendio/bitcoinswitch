@@ -1,3 +1,60 @@
+This fork extends the original lnbits/bitcoinswitch with major new features and hardware support:
+
+## Waveshare ESP32-S3-ETH-8DI-8RO Support
+
+- Native support for Waveshare relay board (8 relays, 8 digital inputs)
+- I2C relay control via TCA9554 expander
+- Digital input monitoring with 1:1 relay-to-input mapping
+## Ethernet-First Networking
+
+- W5500 Ethernet (SPI) with automatic WiFi fallback
+- WiFi can be disabled by leaving credentials blank
+## RGB LED Status Indicator
+
+- WS2812 RGB LED (GPIO 38) replaces TFT display
+- Multi-state LED patterns for boot, config, network, WebSocket, payment, and error
+## Enhanced Configuration System
+
+- SPIFFS-based config file with serial protocol
+- Python configuration tool with interactive config mode detection and remote reset
+- No physical button required for configuration
+## Remote Reset and Status via Serial
+
+- /reset and /reboot commands accepted in both config and normal operation
+- /status command for runtime diagnostics
+## NTP Time Synchronization
+
+- Automatic time sync on network connect
+- Real UTC timestamps in logs and Telegram alerts
+## Digital Input Monitoring and Lock Feedback
+
+- Monitors digital inputs after relay activation to detect mechanical failures
+- Configurable timeout and active state
+## Telegram Notification Integration
+
+- Sends alerts for payments, lock failures, and status events (optional)
+## Event Logging System
+
+- SPIFFS-based persistent event log (human-readable)
+- RAM circular buffer for recent events
+- Optional syslog/network logging
+## Robust Network State Machine
+
+- Ethernet/WiFi/WebSocket state tracking with automatic recovery
+- 2-second stabilization delay before WebSocket connection
+## Improved Error Handling and Debugging
+
+- Detailed serial debug output for all major subsystems
+- Error/status reporting via LED, serial, and (optionally) Telegram
+## Configurable and Backward-Compatible
+
+- All new features are optional and backward-compatible with original config
+- Hardcoded mode for development/testing
+
+
+
+
+
 <img width="600" src="https://user-images.githubusercontent.com/33088785/166832680-600ed270-cbc9-4749-82f1-c1853b242329.png"><img width="600" src="https://user-images.githubusercontent.com/33088785/166829474-a28ca2b7-dd3e-46d4-89d3-8a10bf1d3fad.png">
 
 # Clicky, the Bitcoin Switch
